@@ -1,3 +1,4 @@
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -14,7 +15,7 @@ class BadmintonTrajectory:
         vitesse_y = np.sin(angle_rad) * vitesse_ini
         pos_x = 0
         pos_y = 1
-        h = 0.001
+        dt = 0.001
         vitesse_x_prec = vitesse_x
 
         self.pos_x_list.append(pos_x)
@@ -22,21 +23,21 @@ class BadmintonTrajectory:
 
         # Mise à jour des positions et vitesses
         while pos_y >= 0:
-            vitesse_x += derivee_vx(vitesse_x, vitesse_y, h)
-            vitesse_y += derivee_vy(vitesse_x_prec, vitesse_y, h)
+            vitesse_x += acceleration_x(vitesse_x, vitesse_y, dt)
+            vitesse_y += acceleration_y(vitesse_x_prec, vitesse_y, dt)
             vitesse_x_prec = vitesse_x
 
-            pos_x += vitesse_x * h
-            pos_y += vitesse_y * h
+            pos_x += vitesse_x * dt
+            pos_y += vitesse_y * dt
 
             self.pos_x_list.append(pos_x)
             self.pos_y_list.append(pos_y)
 
 
-def derivee_vx(vitesse_x, vitesse_y, increment):
+def acceleration_x(vitesse_x, vitesse_y, increment):
     return -0.22 * vitesse_x * np.sqrt(vitesse_x**2 + vitesse_y**2) * increment
 
-def derivee_vy(vitesse_x, vitesse_y, increment):
+def acceleration_y(vitesse_x, vitesse_y, increment):
     return -(9.81 + 0.22 * vitesse_y * np.sqrt(vitesse_x**2 + vitesse_y**2)) * increment
 
 def plot_trajectory(trajet):
@@ -51,5 +52,5 @@ def plot_trajectory(trajet):
     plt.show()
 
 if __name__ == '__main__':
-    traj = BadmintonTrajectory(30, 42)
+    traj = BadmintonTrajectory(33.33, 35)
     plot_trajectory(traj)
