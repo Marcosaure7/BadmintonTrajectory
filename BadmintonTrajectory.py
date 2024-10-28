@@ -9,10 +9,17 @@ def poly_newton(x, y, h = 0.1):
         y (list): Liste des ordonnées des points.
         h (float) : "Pas" en x utilisé pour construire le tableau de points en sortie
 
+    Préconditions :
+        len(x) == len(y)
+
     Retour :
         x_newton (list): Liste des abscisses des points du polynôme de Newton. 
         y_newton (list): Liste des ordonnées des points du polynôme de Newton. 
     """
+    
+    if (len(x) != len(y)):
+        raise Exception("Les vecteurs x et y doivent être de la même dimension!")
+
     n = len(x)
 
     # Tableau des différences divisées selon : {f[x0], f[x0, x1], ... , f[x0, ..., xn]}
@@ -74,5 +81,5 @@ def plot_trajectory(x, y):
 
 
 if __name__ == "__main__":
-    x, y = poly_newton([0, 3, 6], [1, 3, 0])
+    x, y = poly_newton([0, 3, 4, 6], [1, 3, 2, 0])
     plot_trajectory(x, y)
