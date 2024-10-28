@@ -1,3 +1,4 @@
+import numpy as np
 import matplotlib.pyplot as plt
 
 def poly_newton(x, y, h = 0.1):
@@ -66,6 +67,35 @@ def difference_divisee(x, y, i, j):
     # Appel récursif pour calculer les différences d'ordre > 0
     return ((difference_divisee(x, y, i + 1, j) - difference_divisee(x, y, i, j - 1))/(x[j] - x[i]))
 
+
+
+def moindres_carres(x, y):
+    """
+    Détermine la courbe de degré 2 qui minimise l'erreur sur les points (x, y) passés en paramètres.
+
+    Paramètres :
+        x (list): Liste des abscisses des points.
+        y (list): Liste des ordonnées des points.
+
+    Retour :
+        x (list): Liste des abscisses des points engendrés par la courbe obtenue.
+        y (list): Liste des ordonnées des points engendrés par la courbe obtenue.
+
+    """
+
+    n = len(x)
+    A = np.empty((0,3))
+    for i in range (n): A = np.vstack([A, np.array([x[i]**2, x[i], 1])])
+
+    A_transpose = A.T
+
+    b_col = np.array(y).reshape(-1, 1)
+
+    return x, y
+
+
+    
+
 def plot_trajectory(x, y):
     plt.figure(figsize=(12, 6))
     plt.plot(x, y, color='blue')
@@ -81,5 +111,5 @@ def plot_trajectory(x, y):
 
 
 if __name__ == "__main__":
-    x, y = poly_newton([0, 3, 4, 6], [1, 3, 2, 0])
+    x, y = moindres_carres([0, 1, 2, 3], [0, 1, 4, 9])
     plot_trajectory(x, y)
