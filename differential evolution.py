@@ -49,6 +49,7 @@ def acceleration_y(vitesse_x, vitesse_y, increment):
 
 def optimize_trajectory(points):
     def objective(params):
+
         vitesse_ini, angle = params
         trajet = BadmintonTrajectory(vitesse_ini, angle)
         return trajet.distance_to_points(points)
