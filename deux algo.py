@@ -1,6 +1,7 @@
 from scipy.optimize import differential_evolution, minimize
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 class BadmintonTrajectory:
     def __init__(self, vitesse_ini, angle, dt):
@@ -47,6 +48,8 @@ def acceleration_y(vitesse_x, vitesse_y, increment):
     return -(9.81 + 0.22 * vitesse_y * np.sqrt(vitesse_x**2 + vitesse_y**2)) * increment
 
 def optimize_trajectory(points):
+    start_time = time.time()  # Start timer
+
     # Differential Evolution Optimization (coarse dt)
     def objective_de(params):
         vitesse_ini, angle = params
@@ -66,6 +69,10 @@ def optimize_trajectory(points):
     initial_guess = [vitesse_de, angle_de]
     result_slsqp = minimize(objective_slsqp, initial_guess, bounds=bounds, method='SLSQP')
     vitesse_slsqp, angle_slsqp = result_slsqp.x
+
+    end_time = time.time()  # End timer
+    elapsed_time = end_time - start_time
+    print(f"Optimization time: {elapsed_time:.2f} seconds")
 
     return vitesse_slsqp, angle_slsqp  # Final optimized speed and angle
 
