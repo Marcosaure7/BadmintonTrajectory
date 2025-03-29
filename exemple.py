@@ -2,7 +2,7 @@
 import numpy as np
 
 from BadmintonTrajectory import BadmintonTrajectory
-from fichierClean import calculer_param
+import calculer_param
 
 if __name__ == "__main__":
     att_x = 6.7
