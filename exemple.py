@@ -13,7 +13,7 @@ if __name__ == "__main__":
     vitesse_optimale, angle_optimal = calculer_param.optimize_trajectory(distance_atterissage_axe_x=att_x,
                                                                          hauteur_au_filet=hauteur_au_filet,
                                                                          angle_horizontale_rad=angle_horiz,
-                                                                         liste_Points_2D=points)
+                                                                         liste_points_2D=points)
 
     print(f"  Vitesse initiale optimale : {vitesse_optimale:.2f} m/s")
     print(f"  Angle vertical optimal : {angle_optimal:.2f} degrés")

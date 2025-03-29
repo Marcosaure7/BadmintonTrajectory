@@ -2,13 +2,15 @@ from scipy.optimize import differential_evolution, minimize
 import numpy as np
 import time
 
+from sklearn.utils.extmath import weighted_mode
+
 # Constantes globales
 dt_DE = 0.01  # Pas de temps pour l'évolution différentielle
 dt_SLSQP = 0.001  # Pas de temps pour SLSQP
 co_fraine = 0.25  # Coefficient de frottement
 
 
-class BadmintonTrajectory:
+class calculer_param:
     """Classe interne pour simuler et évaluer une trajectoire de volant de badminton."""
 
     def __init__(self, vitesse_ini, angle_verticale, position_filet, dt):
@@ -44,7 +46,7 @@ class BadmintonTrajectory:
         self.pos_x_list = np.array(pos_x_list)
         self.pos_y_list = np.array(pos_y_list)
 
-    def get_y_at_x0(self):
+    def get_y_at_Net(self):
         """Calcule la hauteur y au point x=0 (filet) par interpolation linéaire."""
         idx = np.searchsorted(self.pos_x_list, 0)
         if idx == 0 or idx >= len(self.pos_x_list):
@@ -56,43 +58,58 @@ class BadmintonTrajectory:
     def distance_to_points(self, points, weights=None):
         """Calcule la distance totale pondérée entre la trajectoire et les points cibles."""
         filtered_points = [(px, py, w) for (px, py), w in zip(points, weights) if w > 0]
-        distances = []
+        weighted_distances = []
         for px, py, weight in filtered_points:
             min_distance = min(
                 np.sqrt((px - x) ** 2 + (py - y) ** 2)
                 for x, y in zip(self.pos_x_list, self.pos_y_list)
             )
-            distances.append(weight * min_distance)
-        total_distance = sum(distances)
+            weighted_distances.append(weight * min_distance)
+        total_weighted_distance = sum(weighted_distances)
 
         # Pénalité pour la hauteur au filet
-        y_at_x0 = self.get_y_at_x0()
+        y_at_x0 = self.get_y_at_Net()
         hauteur_au_filet = points[0][1]
         if y_at_x0 <= 1.55:
             penalty = (1.55 - y_at_x0) * 1000
-            total_distance += penalty
+            total_weighted_distance += penalty
         elif y_at_x0 < hauteur_au_filet:
             penalty = (hauteur_au_filet - y_at_x0) * 500 * weights[0]
-            total_distance += penalty
+            total_weighted_distance += penalty
 
-        return total_distance
+        return total_weighted_distance
 
 
-def optimize_trajectory(distance_atterissage_axe_x, hauteur_au_filet=None, liste_Points_2D=None, angle_horizontale_rad=None):
+def optimize_trajectory(distance_atterissage_axe_x, hauteur_au_filet=None, liste_points_2D=None,
+                        angle_horizontale_rad=None):
     """
     Optimise la trajectoire d'un volant de badminton pour passer par des points cibles.
 
     Args:
         distance_atterissage (float): Distance cible d'atterrissage en mètres selon l'axe des x a partir du filet
         hauteur_au_filet (float, optional): Hauteur cible au filet en mètres
-        liste_Points_2D (list, optional): Liste de points 2D [(x1, y1), (x2, y2), ...]
+        liste_points_2D (list, optional): Liste de points 2D [(x1, y1), (x2, y2), ...]
 
     Returns:
         tuple: (vitesse_initiale, angle) optimaux en m/s et degrés
     """
 
+    def objective_slsqp(params):
+        vitesse_ini, angle = params
+        trajet = calculer_param(vitesse_ini, angle, -distance_filet, dt=dt_SLSQP)
+        return trajet.distance_to_points(points, weights)
+
+    def objective_de(params):
+        vitesse_ini, angle = params
+        trajet = calculer_param(vitesse_ini, angle, -distance_filet, dt=dt_DE)
+        return trajet.distance_to_points(points, weights)
+
     distance_filet = 1.98 / np.cos(angle_horizontale_rad)
+
     distance_atterissage = distance_atterissage_axe_x / np.cos(angle_horizontale_rad)
+
+    if liste_points_2D is not None:
+        liste_points_2D = [(x / np.cos(angle_horizontale_rad), y) for x, y in liste_points_2D]
 
     if np.isclose(np.sin(angle_horizontale_rad), 0):
         terme1 = float('inf')  # Évite la division par zéro
@@ -122,25 +139,16 @@ def optimize_trajectory(distance_atterissage_axe_x, hauteur_au_filet=None, liste
     importance_distance_atterissage = -2 * np.sqrt(distance_atterissage) + 0.3 * distance_atterissage + 4
 
     # Définition des points et poids
-    points = [(0, hauteur_au_filet), (distance_atterissage, 0)] + (liste_Points_2D or [])
+    points = [(0, hauteur_au_filet), (distance_atterissage, 0)] + (liste_points_2D or [])
     weights = [importance_hauteur_filet, importance_distance_atterissage] + [1] * (len(points) - 2)
 
     # Fonction objective pour l'évolution différentielle
-    def objective_de(params):
-        vitesse_ini, angle = params
-        trajet = BadmintonTrajectory(vitesse_ini, angle, -distance_filet , dt=dt_DE)
-        return trajet.distance_to_points(points, weights)
+
 
     # Optimisation globale avec évolution différentielle
     bounds = [(7, 35), (0, 85)]  # Vitesse: 7-35 m/s, Angle: 0-85°
     result_de = differential_evolution(objective_de, bounds)
     vitesse_de, angle_de = result_de.x
-
-    # Fonction objective pour SLSQP
-    def objective_slsqp(params):
-        vitesse_ini, angle = params
-        trajet = BadmintonTrajectory(vitesse_ini, angle, -distance_filet, dt=dt_SLSQP)
-        return trajet.distance_to_points(points, weights)
 
     # Optimisation locale avec SLSQP
     initial_guess = [vitesse_de, angle_de]
@@ -150,3 +158,6 @@ def optimize_trajectory(distance_atterissage_axe_x, hauteur_au_filet=None, liste
     elapsed_time = time.time() - start_time
     print(f"Temps d’optimisation : {elapsed_time:.2f} secondes")
     return vitesse_slsqp, angle_slsqp
+
+
+
