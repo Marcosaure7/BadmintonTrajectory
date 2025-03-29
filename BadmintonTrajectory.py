@@ -13,8 +13,8 @@ class BadmintonTrajectory:
         angle_rad = np.radians(angle)
         vitesse_x = np.cos(angle_rad) * vitesse_ini
         vitesse_y = np.sin(angle_rad) * vitesse_ini
-        pos_x = 0
-        pos_y = 1
+        pos_x = -1.98
+        pos_y = 1.55
         dt = 0.001
         vitesse_x_prec = vitesse_x
 
@@ -32,6 +32,7 @@ class BadmintonTrajectory:
 
             self.pos_x_list.append(pos_x)
             self.pos_y_list.append(pos_y)
+
 
 
 def acceleration_x(vitesse_x, vitesse_y, increment):
