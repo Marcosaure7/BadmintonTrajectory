@@ -1,5 +1,6 @@
 import numpy as np
 
+import SimulateurTrajPourOpti
 from BadmintonTrajectory import BadmintonTrajectory
 from BadmintonTrajectoryVisualizer import BadmintonTrajectoryVisualizer
 from OptimiseurTrajectoire import OptimiseurTrajectoire
@@ -20,6 +21,7 @@ if __name__ == "__main__":
 
     print(f"Vitesse initiale optimale : {vitesse_optimale:.2f} m/s")
     print(f"Angle vertical optimal : {angle_optimal:.2f} degrés")
+    
 
     traj_x, traj_y, traj_z = BadmintonTrajectory.calculer_traj(vitesse_ini= vitesse_optimale, angle_vertical=angle_optimal, angle_horiz_rad=angle_horiz)
     BadmintonTrajectoryVisualizer.afficher_graphique_interactif(traj_x, traj_y, traj_z)
