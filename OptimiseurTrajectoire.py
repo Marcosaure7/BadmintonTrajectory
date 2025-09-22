@@ -1,11 +1,10 @@
-# optimiseur_trajectoire.py
 import time
 import numpy as np
 from scipy.optimize import differential_evolution, minimize
 
 from SimulateurTrajPourOpti import SimulateurTrajPourOptiGPU
 
-DT_DE = 0.0001
+DT_DE = 0.0005
 
 class OptimiseurTrajectoire:
     @staticmethod
@@ -55,22 +54,21 @@ class OptimiseurTrajectoire:
 
         start_time = time.time()
 
-        # DE vectorisé: sim_de reçoit un tableau (N,2) et renvoie (N,)
-        result_de = differential_evolution(
-            func=sim_de,
-            bounds=bounds,
-            strategy="best1bin",
-            maxiter=maxiter,
-            popsize=popsize,
-            tol=0.01,
-            mutation=(0.5, 1.0),
-            recombination=0.7,
-            polish=False,       # polish séparé
-            updating="deferred",
-            vectorized=True,    # essentiel pour batcher sur GPU
-        )
+        # Grid search instead of differential evolution
+        delta_v = 0.12
+        delta_theta = 360/800
+
+        v_array = np.arange(bounds[0][0], bounds[0][1] + delta_v / 2.0, delta_v)
+        theta_array = np.arange(bounds[1][0], bounds[1][1] + delta_theta / 2.0, delta_theta)
+
+        V, Theta = np.meshgrid(v_array, theta_array, indexing='ij')
+        params = np.stack((V.ravel(), Theta.ravel()), axis=1)
+
+        costs = sim_de(params)
+
+        idx = np.argmin(costs)
+        best_params = params[idx]
 
         elapsed_time = time.time() - start_time
         print(f"Temps d’optimisation (GPU via WebGPU) : {elapsed_time:.2f} s")
-        return result_de.x
-
+        return best_params

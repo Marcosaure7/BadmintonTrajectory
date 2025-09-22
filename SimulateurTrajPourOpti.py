@@ -1,4 +1,3 @@
-# simulateur_traj_gpu.py
 import math
 import numpy as np
 import wgpu.backends.auto  # active un backend WebGPU (Vulkan/DX12/Metal)
@@ -6,7 +5,7 @@ import wgpu
 
 COEFFICIENT_FROTTEMENT = 0.25
 G = 9.81
-MAX_TARGETS = 64  # augmente si tu as plus de points cibles
+MAX_TARGETS = 5  # augmente si tu as plus de points cibles
 
 WGSL_SHADER = f"""
 struct Consts {{
@@ -209,20 +208,7 @@ class SimulateurTrajPourOptiGPU:
             ],
         )
 
-    def __call__(self, X):
-        """
-        X: shape (2,) or (N, 2) or (2, N) for vectorized calls. Returns float or ndarray (N,).
-        Each candidate is [v0, angle_vertical_deg].
-        """
-        X = np.asarray(X, dtype=np.float32)
-        if X.ndim == 1:
-            X = X[None, :]  # Convert (2,) to (1, 2)
-        elif X.ndim == 2 and X.shape[0] == 2 and X.shape[1] != 2:
-            X = X.T  # Convert (2, N) to (N, 2) for vectorized calls
-
-        if X.shape[1] != 2:
-            raise ValueError("Each candidate must be [v0, angle_vertical_deg].")
-
+    def _compute_batch(self, X):
         N = X.shape[0]
         self._ensure_buffers(N)
 
@@ -246,4 +232,37 @@ class SimulateurTrajPourOptiGPU:
         # Read results
         out_bytes = self.queue.read_buffer(self.buf_results, 0, N * 4)
         res = np.frombuffer(out_bytes, dtype=np.float32).copy()
+        return res
+
+    def __call__(self, X):
+        """
+        X: shape (2,) or (N, 2) or (2, N) for vectorized calls. Returns float or ndarray (N,).
+        Each candidate is [v0, angle_vertical_deg].
+        """
+        X = np.asarray(X, dtype=np.float32)
+        if X.ndim == 1:
+            X = X[None, :]  # Convert (2,) to (1, 2)
+        elif X.ndim == 2 and X.shape[0] == 2 and X.shape[1] != 2:
+            X = X.T  # Convert (2, N) to (N, 2) for vectorized calls
+
+        if X.shape[1] != 2:
+            raise ValueError("Each candidate must be [v0, angle_vertical_deg].")
+
+        N = X.shape[0]
+        if N == 0:
+            return np.array([], dtype=np.float32)
+
+        MAX_BATCH = 1048576  # 1 << 20, ajuster selon la mémoire GPU disponible
+
+        if N <= MAX_BATCH:
+            res = self._compute_batch(X)
+        else:
+            res_list = []
+            for start in range(0, N, MAX_BATCH):
+                end = min(start + MAX_BATCH, N)
+                batch_X = X[start:end]
+                batch_res = self._compute_batch(batch_X)
+                res_list.append(batch_res)
+            res = np.concatenate(res_list)
+
         return res if X.shape[0] > 1 else float(res[0])
