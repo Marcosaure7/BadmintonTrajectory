@@ -6,8 +6,8 @@ from BadmintonTrajectoryVisualizer import BadmintonTrajectoryVisualizer
 from OptimiseurTrajectoire import OptimiseurTrajectoire
 
 if __name__ == "__main__":
-    att_x = 7
-    att_y = 0
+    att_x = 0
+    att_y = 3
     points = None
     hauteur_net_cible = None  # On laisse None pour laisser l'optimiseur déterminer la hauteur au filet
     angle_horiz = np.arctan(att_y / (att_x + 1.98))

@@ -4,7 +4,8 @@ from scipy.optimize import differential_evolution, minimize
 
 from SimulateurTrajPourOpti import SimulateurTrajPourOptiGPU
 
-DT_DE = 0.0005
+
+DT_DE = 0.0001
 
 class OptimiseurTrajectoire:
     @staticmethod
@@ -58,17 +59,23 @@ class OptimiseurTrajectoire:
         delta_v = 0.12
         delta_theta = 360/800
 
-        v_array = np.arange(bounds[0][0], bounds[0][1] + delta_v / 2.0, delta_v)
-        theta_array = np.arange(bounds[1][0], bounds[1][1] + delta_theta / 2.0, delta_theta)
+        # Pré-calcul des arrays pour éviter des recréations inutiles (micro-opti)
+        v_array = np.linspace(bounds[0][0], bounds[0][1],
+                              int((bounds[0][1] - bounds[0][0]) / delta_v) + 1)
 
+        theta_array = np.linspace(bounds[1][0], bounds[1][1],
+                                  int((bounds[1][1] - bounds[1][0]) / delta_theta) + 1)
+
+        # Revenir à sparse=False pour compatibilité et simplicité (mémoire négligeable pour ~44k points)
         V, Theta = np.meshgrid(v_array, theta_array, indexing='ij')
-        params = np.stack((V.ravel(), Theta.ravel()), axis=1)
+        params = np.column_stack((V.ravel(), Theta.ravel()))  # Efficace pour 2 arrays 1D
 
         costs = sim_de(params)
+        sim_de.destroy()
 
         idx = np.argmin(costs)
         best_params = params[idx]
 
         elapsed_time = time.time() - start_time
-        print(f"Temps d’optimisation (GPU via WebGPU) : {elapsed_time:.2f} s")
+        print(f"Temps d’optimisation (GPU via WebGPU) : {elapsed_time *1000 : .2f} ms ")
         return best_params
