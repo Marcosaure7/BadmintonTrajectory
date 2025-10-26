@@ -1,13 +1,24 @@
 import time
 import numpy as np
-from scipy.optimize import differential_evolution, minimize
-
+import plotly.graph_objects as go
 from SimulateurTrajPourOpti import SimulateurTrajPourOptiGPU
 
+DT_DE = 0.0005
 
-DT_DE = 0.0001
 
 class OptimiseurTrajectoire:
+
+    def __init__(self, device=None):
+        """
+        Initialise l'optimiseur avec un simulateur GPU réutilisable.
+        Les targets seront mis à jour via update_targets dans optimiser_trajectoire.
+        """
+        # Création une seule fois du simulateur GPU avec paramètres fixes (sans targets initiaux)
+        self.sim = SimulateurTrajPourOptiGPU(
+            dt=DT_DE, t_max=8.0, device=device
+        )
+        print("Simulateur GPU chargé et prêt pour réutilisation.")
+
     @staticmethod
     def calculer_distance_max(angle_horizontal_rad):
         s, c = np.sin(angle_horizontal_rad), np.cos(angle_horizontal_rad)
@@ -19,12 +30,12 @@ class OptimiseurTrajectoire:
     def determiner_hauteur_net_cible(distance_atterrissage):
         return 0.05 * (distance_atterrissage - 0.5) ** 2 + 1.6
 
-    @staticmethod
-    def optimiser_trajectoire(distance_atterrissage_x, angle_horizontal_rad,
+    def optimiser_trajectoire(self, distance_atterrissage_x, angle_horizontal_rad,
                               hauteur_net_cible=None, liste_points_2D=None,
                               popsize=128, maxiter=120, t_max=8.0, device=None):
         """
         Renvoie [vitesse_initiale, angle_vertical_deg].
+        Réutilise self.sim en mettant à jour les targets.
         """
         c = np.cos(angle_horizontal_rad)
         distance_net = 1.98 / c
@@ -42,22 +53,23 @@ class OptimiseurTrajectoire:
 
         points_cibles = [(0.0, float(hauteur_net_cible)), (float(distance_atterrissage), 0.0)]
         poids = [float(importance_net), float(importance_atterrissage)]
+
         if liste_points_2D:
             points_cibles.extend([(x / c, y) for x, y in liste_points_2D])
             poids.extend([1.0] * len(liste_points_2D))
 
         position_net = -distance_net  # filet à x=0
 
-        # Objectifs GPU (un pour DE en dt grossier, un pour SLSQP en dt fin)
-        sim_de = SimulateurTrajPourOptiGPU(points_cibles, poids, position_net, dt=DT_DE, t_max=t_max, device=device)
+        # Mise à jour des targets dans le simulateur réutilisable (pas de nouvelle création)
+        self.sim.update_targets(points_cibles, poids, position_net)
 
         bounds = [(7.0, 35.0), (0.0, 85.0)]
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         # Grid search instead of differential evolution
-        delta_v = 0.12
-        delta_theta = 360/800
+        delta_v = 0.12 / 2
+        delta_theta = 360 / 800 / 2
 
         # Pré-calcul des arrays pour éviter des recréations inutiles (micro-opti)
         v_array = np.linspace(bounds[0][0], bounds[0][1],
@@ -70,12 +82,37 @@ class OptimiseurTrajectoire:
         V, Theta = np.meshgrid(v_array, theta_array, indexing='ij')
         params = np.column_stack((V.ravel(), Theta.ravel()))  # Efficace pour 2 arrays 1D
 
-        costs = sim_de(params)
-        sim_de.destroy()
+        costs = self.sim(params)  # Réutilisation du simulateur
 
         idx = np.argmin(costs)
         best_params = params[idx]
 
-        elapsed_time = time.time() - start_time
-        print(f"Temps d’optimisation (GPU via WebGPU) : {elapsed_time *1000 : .2f} ms ")
+        elapsed_time = time.perf_counter() - start_time
+        print(f"Temps d’optimisation (GPU via WebGPU, réutilisation) : {elapsed_time * 1000 : .2f} ms ")
+
+        cost2d = np.reshape(costs, (len(v_array), len(theta_array)))
+        cost2d = np.clip(cost2d, None, 5)
+        print(str(min(costs)))
+        fig = go.Figure(data=[go.Surface(
+
+            x=V,
+            y=Theta,
+            z=cost2d,
+            colorscale="Viridis"
+        )])
+
+        fig.update_layout(
+            scene=dict(
+                xaxis_title="Vitesse (v_array)",
+                yaxis_title="Theta (deg)",
+                zaxis_title="Cost"
+            )
+        )
+
+        fig.show()
+
         return best_params
+
+    def destroy(self):
+        """Optionnel : Détruit le simulateur GPU si plus besoin (libère VRAM)."""
+        self.sim.destroy()

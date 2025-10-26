@@ -8,9 +8,14 @@ SERVICE_DIST = 1.98
 DECALAGE_SERVICE_SIMPLE = 0.76  # distance du filet à la ligne de service court
 
 class BadmintonTrajectoryVisualizer:
-    @staticmethod
-    def afficher_graphique_interactif(pos_x_list, pos_y_list, pos_z_list):
-        traces = []
+
+    def __init__(self):
+        self.traces = []
+        self.layout = None
+
+
+    def afficher_graphique_interactif(self, pos_x_list, pos_y_list, pos_z_list):
+        self.traces = []
 
         # Trajectoire du volant
         trace_traj = go.Scatter3d(
@@ -21,7 +26,7 @@ class BadmintonTrajectoryVisualizer:
             line=dict(color='blue', width=4),
             name='Trajectoire'
         )
-        traces.append(trace_traj)
+        self.traces.append(trace_traj)
 
         # Contour du terrain doubles (noir)
         x_doubles = [-LONGUEUR_TERRAIN / 2, -LONGUEUR_TERRAIN / 2, LONGUEUR_TERRAIN / 2, LONGUEUR_TERRAIN / 2,
@@ -37,7 +42,7 @@ class BadmintonTrajectoryVisualizer:
             line=dict(color='black', width=2),
             name='Terrain Doubles'
         )
-        traces.append(trace_doubles)
+        self.traces.append(trace_doubles)
 
         # Contour du terrain simples (rouge en tirets)
         x_singles = [-LONGUEUR_TERRAIN / 2, -LONGUEUR_TERRAIN / 2, LONGUEUR_TERRAIN / 2, LONGUEUR_TERRAIN / 2,
@@ -53,7 +58,7 @@ class BadmintonTrajectoryVisualizer:
             line=dict(color='red', width=2, dash='dash'),
             name='Terrain Simples'
         )
-        traces.append(trace_singles)
+        self.traces.append(trace_singles)
 
         # Lignes de service pour chaque camp (service court)
         x_service_joueur = [-SERVICE_DIST, -SERVICE_DIST]
@@ -90,7 +95,7 @@ class BadmintonTrajectoryVisualizer:
             line=dict(color='orange', width=2),
             name='Service Court Adversaire Droit'
         )
-        traces.extend([trace_service_joueur_gauche, trace_service_joueur_droit,
+        self.traces.extend([trace_service_joueur_gauche, trace_service_joueur_droit,
                        trace_service_adv_gauche, trace_service_adv_droit])
 
         # Lignes centrales dans le service
@@ -110,7 +115,7 @@ class BadmintonTrajectoryVisualizer:
             line=dict(color='green', width=2),
             name='Centre Service Adversaire'
         )
-        traces.extend([trace_centre_joueur, trace_centre_adv])
+        self.traces.extend([trace_centre_joueur, trace_centre_adv])
 
         # Filet : ligne supérieure (en violet)
         trace_filet_sup = go.Scatter3d(
@@ -121,7 +126,7 @@ class BadmintonTrajectoryVisualizer:
             line=dict(color='purple', width=4),
             name='Filet (haut)'
         )
-        traces.append(trace_filet_sup)
+        self.traces.append(trace_filet_sup)
 
         # Dessous du filet : surface verticale semi-transparente
         trace_filet_bas = go.Mesh3d(
@@ -135,7 +140,7 @@ class BadmintonTrajectoryVisualizer:
             opacity=0.5,
             name='Dessous du filet'
         )
-        traces.append(trace_filet_bas)
+        self.traces.append(trace_filet_bas)
 
         # Trait supplémentaire allant de (-1.98, 0, 1.55) à (-1.98, 0, 0)
         trace_trait = go.Scatter3d(
@@ -146,7 +151,7 @@ class BadmintonTrajectoryVisualizer:
             line=dict(color='brown', width=4),
             name='Trait supplémentaire'
         )
-        traces.append(trace_trait)
+        self.traces.append(trace_trait)
 
         # Lignes du corridor du fond (délimitant la zone doubles des zones non utilisées en simple)
         trace_corridor_adv_gauche = go.Scatter3d(
@@ -181,7 +186,7 @@ class BadmintonTrajectoryVisualizer:
             line=dict(color='grey', width=2),
             name='Corridor Joueur Droit'
         )
-        traces.extend([trace_corridor_adv_gauche, trace_corridor_adv_droit,
+        self.traces.extend([trace_corridor_adv_gauche, trace_corridor_adv_droit,
                        trace_corridor_joueur_gauche, trace_corridor_joueur_droit])
 
         # Lignes de service en simple (à 0,76 m du fond)
@@ -201,20 +206,19 @@ class BadmintonTrajectoryVisualizer:
             line=dict(color='cyan', width=2),
             name='Service Simple Joueur'
         )
-        traces.extend([trace_service_simple_adv, trace_service_simple_joueur])
+        self.traces.extend([trace_service_simple_adv, trace_service_simple_joueur])
 
         # Configuration de la mise en page
-        layout = go.Layout(
+        self.layout = go.Layout(
             title='Trajectoire 3D avec filet, corridor et lignes de service simples',
             scene=dict(
                 xaxis=dict(title='X (m)', range=[-LONGUEUR_TERRAIN / 2 - 1, LONGUEUR_TERRAIN / 2 + 1]),
                 yaxis=dict(title='Y (m)', range=[-LARGEUR_TERRAIN / 2 - 0.5, LARGEUR_TERRAIN / 2 + 0.5]),
-                zaxis=dict(title='Hauteur (m)', range=[0, max(pos_y_list) * 1.2]),
+                zaxis=dict(title='Hauteur (m)', range=[0, max(pos_y_list)*1.5]),
                 aspectmode='manual',
                 aspectratio=dict(x=LONGUEUR_TERRAIN / 6.1, y=1, z=0.5)
             ),
             showlegend=False
         )
 
-        fig = go.Figure(data=traces, layout=layout)
-        fig.show()
+        fig = go.Figure(data=self.traces, layout=self.layout)

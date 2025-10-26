@@ -1,4 +1,4 @@
-# SimulateurTrajPourOpti.py  (fixed)
+# SimulateurTrajPourOpti.py  (RK4 version, fixed shader)
 import gc
 
 import numpy as np
@@ -11,24 +11,24 @@ MAX_TARGETS = 5
 DEFAULT_MAX_CANDIDATES = 200_000
 WORKGROUP_SIZE = 128  # better occupancy for most GPUs
 
-# WGSL: uses squared distances inside the loop (sqrt only at the end)
+# WGSL: uses squared distances inside the loop (sqrt only at the end), now with RK4 integration
 WGSL_SHADER = f"""
 struct Consts {{
-    dt: f32,
-    g: f32,
-    k: f32,
-    position_net: f32,
-    y0: f32,
-    n_steps_f: f32,
-    num_targets_f: f32,
-    num_candidates_f: f32,
+dt: f32,
+g: f32,
+k: f32,
+position_net: f32,
+y0: f32,
+n_steps_f: f32,
+num_targets_f: f32,
+num_candidates_f: f32,
 }};
 
 @group(0) @binding(0) var<uniform> consts: Consts;
-@group(0) @binding(1) var<storage, read> params: array<f32>;       // [v0, angle_deg] * N
-@group(0) @binding(2) var<storage, read> target_px: array<f32>;    // len <= MAX_TARGETS
-@group(0) @binding(3) var<storage, read> target_py: array<f32>;    // len <= MAX_TARGETS
-@group(0) @binding(4) var<storage, read> target_w: array<f32>;     // len <= MAX_TARGETS
+@group(0) @binding(1) var<storage, read> params: array<f32>; // [v0, angle_deg] * N
+@group(0) @binding(2) var<storage, read> target_px: array<f32>; // len <= MAX_TARGETS
+@group(0) @binding(3) var<storage, read> target_py: array<f32>; // len <= MAX_TARGETS
+@group(0) @binding(4) var<storage, read> target_w: array<f32>; // len <= MAX_TARGETS
 @group(0) @binding(5) var<storage, read_write> results: array<f32>; // len N
 
 @compute @workgroup_size({WORKGROUP_SIZE})
@@ -78,13 +78,64 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {{
         min_d2[t] = 3.402823e38;
     }}
 
-    for (var s: u32 = 0u; s < n_steps; s = s + 1u) {{
-        let speed = sqrt(vx * vx + vy * vy);
-        vx = vx - consts.k * vx * speed * consts.dt;
-        vy = vy - (consts.g + consts.k * vy * speed) * consts.dt;
+    // track elapsed steps until impact
+    var elapsed_steps: u32 = 0u;
 
-        let nx = px + vx * consts.dt;
-        let ny = py + vy * consts.dt;
+    let dt = consts.dt;
+    let k = consts.k;
+    let g = consts.g;
+
+    for (var s: u32 = 0u; s < n_steps; s = s + 1u) {{
+        // RK4 stage 1
+        let speed1 = sqrt(vx * vx + vy * vy);
+        let ax1 = -k * vx * speed1;
+        let ay1 = -g - k * vy * speed1;
+        let k1_px = dt * vx;
+        let k1_py = dt * vy;
+        let k1_vx = dt * ax1;
+        let k1_vy = dt * ay1;
+
+        // RK4 stage 2
+        let vx2 = vx + 0.5 * k1_vx;
+        let vy2 = vy + 0.5 * k1_vy;
+        let speed2 = sqrt(vx2 * vx2 + vy2 * vy2);
+        let ax2 = -k * vx2 * speed2;
+        let ay2 = -g - k * vy2 * speed2;
+        let k2_px = dt * (vx + 0.5 * k1_vx);
+        let k2_py = dt * (vy + 0.5 * k1_vy);
+        let k2_vx = dt * ax2;
+        let k2_vy = dt * ay2;
+
+        // RK4 stage 3
+        let vx3 = vx + 0.5 * k2_vx;
+        let vy3 = vy + 0.5 * k2_vy;
+        let speed3 = sqrt(vx3 * vx3 + vy3 * vy3);
+        let ax3 = -k * vx3 * speed3;
+        let ay3 = -g - k * vy3 * speed3;
+        let k3_px = dt * (vx + 0.5 * k2_vx);
+        let k3_py = dt * (vy + 0.5 * k2_vy);
+        let k3_vx = dt * ax3;
+        let k3_vy = dt * ay3;
+
+        // RK4 stage 4
+        let vx4 = vx + k3_vx;
+        let vy4 = vy + k3_vy;
+        let speed4 = sqrt(vx4 * vx4 + vy4 * vy4);
+        let ax4 = -k * vx4 * speed4;
+        let ay4 = -g - k * vy4 * speed4;
+        let k4_px = dt * (vx + k3_vx);
+        let k4_py = dt * (vy + k3_vy);
+        let k4_vx = dt * ax4;
+        let k4_vy = dt * ay4;
+
+        // Update deltas
+        let delta_px = (k1_px + 2.0 * k2_px + 2.0 * k3_px + k4_px) / 6.0;
+        let delta_py = (k1_py + 2.0 * k2_py + 2.0 * k3_py + k4_py) / 6.0;
+        let delta_vx = (k1_vx + 2.0 * k2_vx + 2.0 * k3_vx + k4_vx) / 6.0;
+        let delta_vy = (k1_vy + 2.0 * k2_vy + 2.0 * k3_vy + k4_vy) / 6.0;
+
+        let nx = px + delta_px;
+        let ny = py + delta_py;
 
         // min squared distances
         for (var t: u32 = 0u; t < num_targets; t = t + 1u) {{
@@ -98,7 +149,12 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {{
 
         // net height (interpolate at x=0 crossing)
         if (!net_found && (prev_px <= 0.0) && (nx > 0.0)) {{
-            y_net = prev_py + (-prev_px) * (ny - prev_py) / (nx - prev_px);
+            let denom = nx - prev_px;
+            if (denom != 0.0) {{
+                y_net = prev_py + (-prev_px) * (ny - prev_py) / denom;
+            }} else {{
+                y_net = prev_py;
+            }}
             net_found = true;
         }}
 
@@ -106,10 +162,19 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {{
         prev_py = ny;
         px = nx;
         py = ny;
+        vx = vx + delta_vx;
+        vy = vy + delta_vy;
 
+        // If the projectile hits the ground, record elapsed steps and break
         if (ny < 0.0) {{
+            elapsed_steps = s + 1u; // number of steps until impact
             break;
         }}
+    }}
+
+    // If we never set elapsed_steps (no early break), then trajectory lasted full n_steps
+    if (elapsed_steps == 0u) {{
+        elapsed_steps = n_steps;
     }}
 
     var total = 0.0;
@@ -120,9 +185,19 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {{
         total = total + (1.55 - y_net) * 1000.0;
     }}
 
+    // compute elapsed time and add the requested small time-penalty: (1 - 1 / elapsed_time)
+    var elapsed_time = f32(elapsed_steps) * consts.dt;
+    // Protect against division by zero or extremely small times
+    if (elapsed_time < 1e-6) {{
+        elapsed_time = 1e-6;
+    }}
+    let time_penalty = elapsed_time/4;
+    total = total + time_penalty;
+
     results[i] = total;
 }}
 """
+
 
 
 def pick_wgpu_device():
@@ -147,13 +222,8 @@ class SimulateurTrajPourOptiGPU:
     - Uniforms: dt, g, k, position_net, y0, n_steps, num_targets, num_candidates.
     - __call__ accepts (2,), (N,2) or (2,N) and returns float or ndarray(N,).
     """
-    def __init__(self, points_cibles, poids, position_net, dt, t_max=8.0, device=None,
+    def __init__(self, points_cibles=None, poids=None, position_net=0.0, dt=0.001, t_max=8.0, device=None,
                  max_candidates=DEFAULT_MAX_CANDIDATES):
-
-        if len(points_cibles) != len(poids):
-            raise ValueError("points_cibles et poids doivent avoir la même longueur.")
-        if len(points_cibles) > MAX_TARGETS:
-            raise ValueError(f"Nombre de cibles {len(points_cibles)} > MAX_TARGETS={MAX_TARGETS}.")
 
         self.device = device or pick_wgpu_device()
         self.queue = self.device.queue
@@ -211,12 +281,12 @@ class SimulateurTrajPourOptiGPU:
         self.buf_tw = self.device.create_buffer(size=cap_bytes, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
 
         # Uniforms (updated partially per-call)
-        self.num_targets = min(len(points_cibles), MAX_TARGETS)
+        self.num_targets = 0  # Default if no targets provided
         self.position_net = float(position_net)
 
         self._uniform_vec = np.array([
             self.dt, self.g, self.k, self.position_net,
-            self.y0, float(self.n_steps), float(self.num_targets), 0.0
+            self.y0, float(self.n_steps), float(self.num_targets), 0.0  # num_candidates placeholder
         ], dtype=np.float32)
         uniform_bytes = self._uniform_vec.tobytes()
         self._uniform_size = len(uniform_bytes)
@@ -240,8 +310,9 @@ class SimulateurTrajPourOptiGPU:
             ],
         )
 
-        # Initial upload of targets
-        self.update_targets(points_cibles, poids, position_net)
+        # Initial upload of targets if provided
+        if points_cibles is not None and poids is not None:
+            self.update_targets(points_cibles, poids, position_net)
 
     def _write_uniform_f32(self, index, value):
         # Update one float in the uniform buffer at given index
@@ -328,4 +399,3 @@ class SimulateurTrajPourOptiGPU:
         self.buf_tpx.destroy()
         self.buf_tpy.destroy()
         self.buf_tw.destroy()
-
